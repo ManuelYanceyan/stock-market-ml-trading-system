@@ -1,0 +1,48 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+
+# --- Virtual environments / secrets --------------------------------------
+.venv/
+venv/
+env/
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+.streamlit/secrets.toml
+
+# --- Data (never commit market data) --------------------------------------
+data/
+*.parquet
+*.csv.gz
+*.zip
+!requirements.txt
+
+# --- Generated logs --------------------------------------------------------
+reports/logs/
+*.log
+
+# Paper-broker demo log (created only when the broker demo is executed)
+reports/orders_simulated.csv
+
+# --- OS / editor -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# --- Keep the evidence artefacts ------------------------------------------
+!reports/metrics.json
+!reports/summary.md
+!reports/pytest.xml
+!reports/figures/
+!reports/tables/

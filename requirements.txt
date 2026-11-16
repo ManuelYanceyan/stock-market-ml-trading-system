@@ -1,0 +1,27 @@
+# Runtime dependencies for the ETF ML trading research project.
+# Exact versions used for the published reference run are listed in
+# docs/methodology.md ("Environment") and README.md.
+
+pandas>=2.2,<3.0
+numpy>=2.0,<3.0
+scikit-learn>=1.4,<2.0
+matplotlib>=3.8,<4.0
+
+# Market data and HTTP sources
+yfinance>=0.2.40
+requests>=2.31
+
+# Storage (parquet cache)
+pyarrow>=15.0
+
+# Gradient boosting model
+xgboost>=2.0
+
+# Tests
+pytest>=8.0
+
+# Notebook + dashboard
+jupyter>=1.0
+nbconvert>=7.0
+nbformat>=5.0
+streamlit>=1.30

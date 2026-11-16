@@ -1,0 +1,64 @@
+# Official rubric checklist - self-assessment
+
+Rubric source: <https://github.com/DataTalksClub/stock-markets-analytics-zoomcamp/blob/main/projects/README.md> (generated from the reference run recorded in `reports/metrics.json`, 2026-11-16T00:40:12Z).
+
+**Self-assessment summary:** 28 criteria DONE, 4 PARTIAL, 2 NOT DONE. This is the student's own assessment against the published rubric; peer reviewers assign the actual score.
+
+Evidence snapshot: 17,892 modelling rows, test window 970 sessions / 5,820 rows, 7 models, 4 strategies, best model xgboost, 42/42 pytest tests passed (reports/pytest.xml).
+
+| Section | Points | Criterion | Status | Evidence | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 1. Problem description | 1 (bold) | Problem described in README briefly | **DONE** | README.md sections 'Objective' and 'Research question'. | Plain-language statement of the prediction problem at the top of the README. |
+| 1. Problem description | 1 | Problem described with context and end goal (how the solution is used) | **DONE** | README.md 'Objective', 'How the output is used'; docs/methodology.md. | Explains the signal -> simulated execution -> reporting flow and the decision it supports. |
+| 1. Problem description | 1 | New problem definition (not the standard week-long large-cap setup) | **PARTIAL** | config.py (asset universe, next-session open-to-close target); README 'Why this target'. | Different horizon (next-session open-to-close instead of a multi-day horizon) and an ETF universe with sector funds, but still US ETFs; not a new asset class or exchange. |
+| 1. Problem description | 1 | Clear step-by-step description of findings and how to reproduce | **DONE** | README.md, docs/methodology.md, reports/summary.md, notebooks/research.ipynb. | Every stage is documented with the command that produces it and the artefact it writes. |
+| 2. Data sources | 1 (bold) | Uses the lecture data sources and features | **DONE** | src/download_data.py (yfinance OHLCV, FRED VIXCLS/DGS10/DGS3MO); docs/data_dictionary.md. | Same provider family and the same technical/macro feature ideas as the course notebooks. |
+| 2. Data sources | 1 | 20+ new features described (+10% volume style bonus) | **DONE** | docs/data_dictionary.md; 57 numeric + 23 dummy features. | 57 numeric features and 23 dummy columns, each documented with its formula and timing. |
+| 2. Data sources | 1 | New data source introduced (not YFinance/FRED) | **DONE** | src/download_data.py::fetch_french_factors; README 'Data sources'. | Kenneth R. French Data Library (Fama-French 5 factors + momentum, daily) is downloaded directly from Dartmouth as a key-free CSV/ZIP and used as lagged features. |
+| 2. Data sources | 1 | Large dataset with > 1 million records | **NOT DONE** | 19,548 raw OHLCV rows, 17,892 modelling rows. | The 6-ETF daily universe cannot reach 1M rows. Reaching it would require intraday bars or a much wider universe; that was deliberately out of scope, so this point is NOT claimed. |
+| 3. Transformations + EDA | 1 (bold) | Data combined into one frame; feature sets defined (TO_PREDICT, NUMERIC, DUMMIES) | **DONE** | data/processed/features.parquet (one row per date x ticker), data/processed/features_metadata.json (feature sets), src/build_features.py. | TO_PREDICT = target_up, target_ret_next_oc; NUMERIC and DUMMIES lists are exported in the metadata file. |
+| 3. Transformations + EDA | 1 | At least 5 relevant features generated from transformations | **DONE** | src/build_features.py::_ticker_features. | Momentum lags, realised/downside volatility, MA ratios, RSI, Bollinger %B, ATR, volume z-scores, gap statistics, 52-week distance, beta, relative strength, lagged macro and factors. |
+| 3. Transformations + EDA | 1 | EDA: describe the target, correlations with features | **DONE** | reports/figures/02_target_balance.png, 03_feature_correlation.png, 04_vix_relationship.png, 05_feature_distributions.png; reports/summary.md section 3/6. | Class balance by ETF and year, correlation table with the target (training window only), VIX buckets, distributions and error analysis by ETF/month/probability. |
+| 4. Modeling | 1 (bold) | One course model (DecisionTree / RandomForest) | **DONE** | src/train_models.py (decision_tree, random_forest); reports/tables/classification_metrics.csv. | Both course models are tuned and evaluated. |
+| 4. Modeling | 1 | More than one model used | **DONE** | src/train_models.py; 7 models: baseline_majority, baseline_momentum, decision_tree, random_forest, logistic_regression, xgboost, mlp. | Two baselines, two course models, a regularised linear model, XGBoost and an MLP. |
+| 4. Modeling | 1 | Custom decision rules on higher-probability events | **DONE** | src/backtest.py::build_positions; config.THRESHOLD_GRID; reports/tables/threshold_candidates.csv. | Threshold 0.70 selected on validation; probability-scaled position sizing in S4 is a second custom rule. |
+| 4. Modeling | 1 | Hyper-parameter tuning | **DONE** | src/train_models.py::train_all (GridSearchCV + DatePurgedTimeSeriesSplit); reports/metrics.json -> training.best_params and training.cv_results. | Grids are tuned on the training window with date-grouped time-series CV (embargo 1); best parameters and CV ROC-AUC are recorded per model. |
+| 4. Modeling | 1 | New models introduced (XGBoost / regression / neural network) | **DONE** | src/train_models.py (logistic_regression, xgboost, mlp). | XGBoost, an L2-regularised logistic regression and a small MLP, all with the same preprocessing pipeline fitted on training data only. |
+| 5. Trading simulation | 1 (bold) | Vector simulation for at least one strategy with capital approximation | **DONE** | src/backtest.py::simulate_vectorized; tests/test_backtest.py checks it against the exact loop. | Every strategy is computed both vectorised and row-by-row; the two equity curves match to 1e-12 when no stop loss is used. |
+| 5. Trading simulation | 1 | Two or more strategies covered | **DONE** | src/backtest.py::S1_top_probability, S2_conservative, S3_trend_filter, S4_risk_managed; reports/tables/strategy_performance.csv. | Four documented strategies: threshold, conservative (VIX filter), trend filter, risk-managed. |
+| 5. Trading simulation | 1 | Exact simulation with reinvestment of capital gains | **DONE** | src/backtest.py::simulate_exact (equity *= 1 + daily return); tests for compounding. | Iterative simulation, 100% of current equity at most, compounding session by session, costs charged on entry and exit. |
+| 5. Trading simulation | 1 | Profitability discussion vs benchmark (CAGR, Sharpe, max DD, rolling returns) | **DONE** | reports/summary.md sections 1/4/5; figures 11-13. | Like-for-like SPY open-to-close benchmark on identical dates and costs, plus buy & hold with its different holding period explicitly labelled. |
+| 5. Trading simulation | 1 | Advanced features in the best strategy (risk management, sizing, timing) | **DONE** | src/backtest.py S2/S4 (VIX regime filter, probability-scaled sizing, 1% intraday stop). | S4 scales capital with the probability edge and applies a stop loss; S2 filters by the volatility regime. Intraday entry/exit timing is fixed and documented. |
+| 5. Trading simulation | 1 | New empirical strategy based on predictions (regime / limited concurrency) | **DONE** | src/backtest.py S3_trend_filter (SPY above 50-day MA), S2_conservative (VIX <= 25). | Both are new empirical rules derived from the market-condition idea; the portfolio never holds more than one ETF per session (the 1-concurrent-investment style rule). |
+| 5. Trading simulation | 1 | Exceptional profitability vs a realistic benchmark | **PARTIAL** | reports/summary.md section 1; reports/metrics.json -> backtests_test and benchmarks. | S4_risk_managed has CAGR 4.66% vs -7.60% for the like-for-like SPY open-to-close benchmark (same dates and costs), but SPY buy & hold has CAGR 20.67% over the same period and the best strategy's daily-return t-statistic is below 2. The comparison is real; the word 'exceptional' is not justified, so the point is claimed only partially. |
+| 5. Trading simulation | 1 | Deep exploratory analysis of predictions / errors | **DONE** | reports/summary.md section 6; reports/figures/10_accuracy_by_group.png, 07_calibration.png. | Accuracy/precision by ETF, by month, by probability bucket; correct vs wrong move sizes; improvement ideas in docs/methodology.md. |
+| 6. Automation | 1 (bold) | Notebook + scripts; one notebook runs the whole workflow end-to-end | **DONE** | notebooks/research.ipynb (19 code cells executed with stored outputs); src/*.py modules. | The notebook imports the modules, runs download -> features -> leakage guard -> training -> threshold selection -> backtest -> latest signal -> report, and shows the latest signal. |
+| 6. Automation | 1 | Dependencies managed + README instructions | **DONE** | requirements.txt; README 'Installation (Windows)'. | Pinned minimum versions plus the exact versions used for the published run. |
+| 6. Automation | 1 | Full system re-runs (e.g. cron) on the latest data and produces predictions | **DONE** | python -m src.run_pipeline --mode live; docs/methodology.md 'Scheduling'. | One command refreshes data, retrains, re-backtests, writes reports and prints the next-session signal. A cron/Task Scheduler entry is documented but deliberately NOT enabled. |
+| 6. Automation | 1 | Two regimes: cached files vs fresh download | **DONE** | --mode live vs --mode cached in src/run_pipeline.py; tested locally. | Cached mode performs no HTTP request and fails with a clear message if the cache is missing. |
+| 6. Automation | 1 | Incremental loading with storage outside GitHub | **DONE** | src/download_data.py::update_cache (overlap merge), data/raw/*.parquet, data/raw/manifest.json; .gitignore excludes data/. | Only the last 15 calendar days are re-downloaded and merged with the stored history; row counts and timestamps are recorded in the manifest. Data never goes to GitHub. |
+| 7. Bonus | 1 | Code well designed and commented in modules | **DONE** | src/ modules with docstrings, type hints, logging; tests/ suite. | Each stage is a separate module with a documented contract and unit tests. |
+| 7. Bonus | 1 | Additional code to place bets through a broker API | **PARTIAL** | src/broker.py (paper-broker adapter, refuses non-simulated orders). | A safe adapter exposes the order interface but has no real broker credentials and refuses live orders by design. No live trading was implemented or tested. |
+| 7. Bonus | 1 | Monitoring / dashboard for models, results and trades | **DONE** | src/dashboard.py (Streamlit); reports/metrics.json; reports/tables/*.csv. | `streamlit run src/dashboard.py` renders metrics, equity curves, drawdowns, calibration, trades and the latest signal. Verified locally with Streamlit AppTest (0 exceptions, 3 dataframes) and an HTTP 200 response; it is local only, not hosted. |
+| 7. Bonus | 1 | Containerization | **PARTIAL** | Dockerfile, .dockerignore, README 'Docker' section. | The image definition is provided and Docker CLI 28.5.1 is installed, but the Docker daemon was not running in this environment, so the image was not built or run. Not claimed as verified. |
+| 7. Bonus | 1 | Cloud deployment | **NOT DONE** | No cloud deployment artefacts exist. | The GitHub Actions workflow only runs the test-suite; it is not a deployment and has no schedule. No dashboard, pipeline or database was deployed to any cloud provider, so this bonus point is not claimed. |
+
+## What is deliberately NOT claimed
+
+* **> 1M records**: the dataset has 19,548 raw OHLCV rows, not a million.
+* **Statistically proven edge**: the test-window numbers are reported as they came out. The best strategy beats the like-for-like intraday benchmark net of costs but loses to SPY buy & hold over the same period; its daily-return t-statistic is below 2.
+* **Live trading**: the broker adapter is a paper-only stub; no real order was ever sent.
+* **Docker build**: the Dockerfile is provided, but the Docker daemon was not running here, so the image was not built or run.
+* **Cloud deployment**: nothing was deployed to a cloud provider. The GitHub Actions workflow only runs the tests.
+* **Peer review**: reviewing 3 peer projects is the student's task after submission.
+
+## Minimum score check (bold criteria)
+
+* [x] Problem described in README briefly - DONE
+* [x] Uses the lecture data sources and features - DONE
+* [x] Data combined into one frame; feature sets defined (TO_PREDICT, NUMERIC, DUMMIES) - DONE
+* [x] One course model (DecisionTree / RandomForest) - DONE
+* [x] Vector simulation for at least one strategy with capital approximation - DONE
+* [x] Notebook + scripts; one notebook runs the whole workflow end-to-end - DONE
+
+All six bold criteria are satisfied locally, which covers the 6-point minimum for the bold items. The remaining points depend on the peer review.
