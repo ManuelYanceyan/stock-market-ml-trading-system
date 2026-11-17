@@ -17,6 +17,7 @@ contract in a separate, explicitly enabled adapter.
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,12 @@ class PaperBroker:
         slippage_bps: float = config.SLIPPAGE_BPS,
         log_path: Path = ORDERS_LOG,
     ) -> None:
+        if not math.isfinite(starting_cash) or starting_cash < 0:
+            raise ValueError("starting_cash must be finite and non-negative")
+        if not math.isfinite(commission_bps) or commission_bps < 0:
+            raise ValueError("commission_bps must be finite and non-negative")
+        if not math.isfinite(slippage_bps) or slippage_bps < 0:
+            raise ValueError("slippage_bps must be finite and non-negative")
         self.cash = float(starting_cash)
         self.commission_bps = float(commission_bps)
         self.slippage_bps = float(slippage_bps)
@@ -90,8 +97,10 @@ class PaperBroker:
     def place_order(self, order: Order) -> Order:
         if order.side not in {"buy", "sell"}:
             raise ValueError("side must be 'buy' or 'sell'")
-        if order.quantity <= 0:
-            raise ValueError("quantity must be positive")
+        if not math.isfinite(order.quantity) or order.quantity <= 0:
+            raise ValueError("quantity must be a finite positive number")
+        if not math.isfinite(order.reference_price) or order.reference_price <= 0:
+            raise ValueError("reference_price must be a finite positive number")
 
         fill = self._apply_slippage(order.side, float(order.reference_price))
         notional = order.quantity * fill
@@ -135,13 +144,24 @@ class PaperBroker:
         return order
 
     def equity(self, prices: dict[str, float] | None = None) -> float:
-        """Cash plus the mark-to-market value of open paper positions."""
+        """Cash plus the mark-to-market value of open paper positions.
+
+        Every open position must have a usable mark, either from the last fill
+        price or from ``prices``.  Raising here prevents a missing quote from
+        silently valuing a real holding at zero.
+        """
         marks = dict(self.last_prices)
         if prices:
             marks.update({ticker: float(price) for ticker, price in prices.items()})
-        holdings = sum(
-            quantity * marks.get(ticker, 0.0) for ticker, quantity in self.positions.items()
-        )
+        missing = sorted(ticker for ticker in self.positions if ticker not in marks)
+        if missing:
+            raise ValueError(f"no mark available for open positions: {', '.join(missing)}")
+        holdings = 0.0
+        for ticker, quantity in self.positions.items():
+            mark = float(marks[ticker])
+            if not math.isfinite(mark) or mark < 0:
+                raise ValueError(f"mark for {ticker} must be finite and non-negative")
+            holdings += quantity * mark
         return float(self.cash + holdings)
 
     def simulate_day(
@@ -158,8 +178,12 @@ class PaperBroker:
         commission and slippage.  If the buy is rejected for any reason, the
         matching sell is recorded as rejected and is **not** executed.
         """
-        if open_price <= 0:
-            raise ValueError("open_price must be positive")
+        if not math.isfinite(open_price) or open_price <= 0:
+            raise ValueError("open_price must be a finite positive number")
+        if not math.isfinite(close_price) or close_price <= 0:
+            raise ValueError("close_price must be a finite positive number")
+        if not math.isfinite(capital_fraction) or capital_fraction < 0:
+            raise ValueError("capital_fraction must be a finite non-negative number")
         fill_open = self._apply_slippage("buy", float(open_price))
         affordable = self.cash / (fill_open * (1.0 + self.commission_bps / 10_000.0))
         quantity = max(float(capital_fraction) * affordable, 0.0)

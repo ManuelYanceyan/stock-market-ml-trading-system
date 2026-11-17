@@ -80,3 +80,45 @@ def test_equity_marks_open_positions_to_market(broker):
     cash = broker.cash
     assert broker.equity({"SPY": 110.0}) == pytest.approx(cash + 10.0 * 110.0)
     assert broker.equity({"SPY": 90.0}) == pytest.approx(cash + 10.0 * 90.0)
+
+
+def test_equity_requires_a_mark_for_every_open_position(broker):
+    buy = broker.place_order(
+        Order(ticker="SPY", side="buy", quantity=10.0, reference_price=100.0, session="2024-01-02")
+    )
+    assert buy.status == "filled_paper"
+
+    broker.last_prices.clear()
+
+    with pytest.raises(ValueError, match="no mark available"):
+        broker.equity()
+
+
+def test_order_rejects_non_finite_quantity(broker):
+    with pytest.raises(ValueError, match="finite positive"):
+        broker.place_order(
+            Order(ticker="SPY", side="buy", quantity=float("nan"), reference_price=100.0, session="2024-01-02")
+        )
+
+    assert broker.cash == pytest.approx(10_000.0)
+    assert broker.positions == {}
+
+
+def test_order_rejects_non_positive_reference_price(broker):
+    with pytest.raises(ValueError, match="finite positive"):
+        broker.place_order(
+            Order(ticker="SPY", side="buy", quantity=10.0, reference_price=0.0, session="2024-01-02")
+        )
+
+    assert broker.cash == pytest.approx(10_000.0)
+    assert broker.positions == {}
+
+
+def test_simulate_day_rejects_non_positive_close_price(broker):
+    with pytest.raises(ValueError, match="close_price"):
+        broker.simulate_day(
+            "SPY", capital_fraction=1.0, open_price=100.0, close_price=-1.0, session="2024-01-02"
+        )
+
+    assert broker.cash == pytest.approx(10_000.0)
+    assert broker.positions == {}
