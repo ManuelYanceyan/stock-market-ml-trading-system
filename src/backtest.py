@@ -98,6 +98,37 @@ def cost_fraction(cost_bps_side: float) -> float:
     return 2.0 * cost_bps_side / 10_000.0
 
 
+def _validate_cost(cost_bps_side: float) -> None:
+    if not np.isfinite(cost_bps_side) or cost_bps_side < 0:
+        raise ValueError("cost_bps_side must be a finite non-negative number")
+
+
+def _validate_capital(initial_capital: float) -> None:
+    if not np.isfinite(initial_capital) or initial_capital <= 0:
+        raise ValueError("initial_capital must be a finite positive number")
+
+
+def _validate_session_index(session_index: pd.DatetimeIndex) -> None:
+    if len(session_index) == 0:
+        raise ValueError("session_index must contain at least one session")
+    if session_index.has_duplicates:
+        raise ValueError("session_index must not contain duplicate sessions")
+    if not session_index.is_monotonic_increasing:
+        raise ValueError("session_index must be sorted in ascending order")
+
+
+def _validate_positions(positions: pd.DataFrame) -> None:
+    required = {"signal_date", "trade_date", "ticker", "prob", "weight"}
+    if positions.empty:
+        return
+    missing = sorted(required - set(positions.columns))
+    if missing:
+        raise ValueError(f"positions missing columns: {missing}")
+    weights = pd.to_numeric(positions["weight"], errors="coerce")
+    if weights.isna().any() or (weights < 0).any() or (weights > 1.0 + 1e-9).any():
+        raise ValueError("position weights must be finite and between 0 and 1")
+
+
 def predictions_to_trades(predictions: pd.DataFrame) -> pd.DataFrame:
     """Extract the tradeable fields from a prediction frame."""
     required = ["trade_date", "ticker", config.TARGET_RETURN_COLUMN, "open_next", "low_next"]
@@ -117,6 +148,13 @@ def build_positions(
     min_weight: float = config.STRATEGY_S4_MIN_WEIGHT,
 ) -> pd.DataFrame:
     """Turn per-ETF probabilities into at most one position per session."""
+    if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+        raise ValueError("threshold must be between 0 and 1")
+    if not np.isfinite(prob_full) or prob_full <= 0:
+        raise ValueError("prob_full must be a finite positive number")
+    if not np.isfinite(min_weight) or not 0.0 <= min_weight <= 1.0:
+        raise ValueError("min_weight must be between 0 and 1")
+
     frame = predictions.dropna(subset=["prob"]).copy()
     if frame.empty:
         return pd.DataFrame(columns=["signal_date", "trade_date", "ticker", "prob", "weight"])
@@ -171,6 +209,10 @@ def simulate_exact(
     position builder.  Costs are charged on entry and on exit.
     """
     session_index = pd.DatetimeIndex(session_index)
+    _validate_cost(cost_bps_side)
+    _validate_capital(initial_capital)
+    _validate_session_index(session_index)
+    _validate_positions(positions)
     lookup = _trade_lookup(trades_data)
 
     by_session: dict[pd.Timestamp, list[pd.Series]] = {}
@@ -260,6 +302,10 @@ def simulate_vectorized(
     produce the same equity curve (see ``tests/test_backtest.py``).
     """
     session_index = pd.DatetimeIndex(session_index)
+    _validate_cost(cost_bps_side)
+    _validate_capital(initial_capital)
+    _validate_session_index(session_index)
+    _validate_positions(positions)
     tickers = tickers or sorted(trades_data["ticker"].unique().tolist())
 
     weights = pd.DataFrame(0.0, index=session_index, columns=tickers)
@@ -303,6 +349,8 @@ def benchmark_intraday(
     Same dates, same timing and the same per-side costs as the strategies.
     """
     session_index = pd.DatetimeIndex(session_index)
+    _validate_cost(cost_bps_side)
+    _validate_session_index(session_index)
     realised = (
         trades_data[trades_data["ticker"] == ticker]
         .set_index("trade_date")[config.TARGET_RETURN_COLUMN]
@@ -332,6 +380,7 @@ def benchmark_buy_and_hold(
     position for one session, while buy & hold is permanently invested.
     """
     closes = close_prices.dropna().sort_index()
+    _validate_cost(cost_bps_side)
     returns = closes.pct_change().fillna(0.0)
     if len(returns):
         returns.iloc[0] -= 2.0 * cost_bps_side / 10_000.0

@@ -93,6 +93,58 @@ def test_empty_sessions_stay_in_cash(prediction_frame):
     assert result["metrics"]["exposure_share_of_sessions"] == 0.0
 
 
+def test_simulation_rejects_negative_costs(prediction_frame):
+    positions = build_positions(prediction_frame, 0.6, STRATEGIES["S1_top_probability"])
+    trades = _trades_from(prediction_frame)
+    index = pd.DatetimeIndex(sorted(prediction_frame["trade_date"].unique()))
+
+    with pytest.raises(ValueError, match="cost_bps_side"):
+        simulate_exact(positions, trades, index, cost_bps_side=-1.0)
+
+
+def test_simulation_rejects_unsorted_or_duplicate_sessions(prediction_frame):
+    trades = _trades_from(prediction_frame)
+    empty = pd.DataFrame(columns=["signal_date", "trade_date", "ticker", "prob", "weight"])
+
+    with pytest.raises(ValueError, match="sorted"):
+        simulate_exact(empty, trades, pd.DatetimeIndex(["2024-01-04", "2024-01-03"]))
+    with pytest.raises(ValueError, match="duplicate"):
+        simulate_exact(empty, trades, pd.DatetimeIndex(["2024-01-03", "2024-01-03"]))
+
+
+def test_simulation_rejects_leveraged_position_weight(prediction_frame):
+    positions = pd.DataFrame(
+        [
+            {
+                "signal_date": pd.Timestamp("2024-01-02"),
+                "trade_date": pd.Timestamp("2024-01-03"),
+                "ticker": "SPY",
+                "prob": 0.8,
+                "weight": 1.5,
+            }
+        ]
+    )
+    trades = _trades_from(prediction_frame)
+    index = pd.DatetimeIndex(["2024-01-03"])
+
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        simulate_exact(positions, trades, index)
+
+
+def test_simulation_rejects_non_positive_initial_capital(prediction_frame):
+    positions = build_positions(prediction_frame, 0.6, STRATEGIES["S1_top_probability"])
+    trades = _trades_from(prediction_frame)
+    index = pd.DatetimeIndex(sorted(prediction_frame["trade_date"].unique()))
+
+    with pytest.raises(ValueError, match="initial_capital"):
+        simulate_exact(positions, trades, index, initial_capital=0.0)
+
+
+def test_build_positions_rejects_out_of_range_threshold(prediction_frame):
+    with pytest.raises(ValueError, match="threshold"):
+        build_positions(prediction_frame, 1.2, STRATEGIES["S1_top_probability"])
+
+
 def test_vectorized_and_exact_simulations_agree(prediction_frame):
     positions = build_positions(prediction_frame, 0.6, STRATEGIES["S1_top_probability"])
     trades = _trades_from(prediction_frame)
