@@ -44,6 +44,7 @@ from src.utils import (
     utc_now_iso,
     write_json,
 )
+from src.validate_config import validate_config
 
 logger = get_logger("run_pipeline")
 
@@ -230,6 +231,9 @@ def _error_analysis(predictions: pd.DataFrame, model: str, threshold: float) -> 
 # Pipeline stages
 # ---------------------------------------------------------------------------
 def run(mode: str = "live", tune: bool = True, refresh: bool = False, make_figures: bool = True) -> dict[str, Any]:
+    errors = validate_config()
+    if errors:
+        raise RuntimeError("Invalid configuration:\n- " + "\n- ".join(errors))
     ensure_directories()
     started = utc_now_iso()
     logger.info("=== Pipeline start (mode=%s) ===", mode)
