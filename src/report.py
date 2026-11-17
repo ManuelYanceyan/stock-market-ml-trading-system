@@ -76,6 +76,40 @@ def markdown_table(rows: list[dict[str, Any]], columns: list[tuple[str, str]]) -
     return "\n".join(lines)
 
 
+def select_strategy(
+    validation_results: dict[str, dict[str, Any]],
+    test_results: dict[str, dict[str, Any]],
+) -> tuple[str, str, list[tuple[str, dict[str, Any]]]]:
+    """Choose the strategy on validation and identify the ex-post test leader.
+
+    The test window never participates in the choice.  Requiring both windows
+    to describe the same strategy set keeps the reported ranking comparable and
+    turns a malformed metrics file into a clear error instead of a KeyError.
+
+    Returns ``(selected, test_leader, validation_ranking)``.
+    """
+    if not validation_results:
+        raise ValueError("validation results are required to select a strategy")
+    if not test_results:
+        raise ValueError("test results are required to report the selected strategy")
+    if set(validation_results) != set(test_results):
+        missing_test = sorted(set(validation_results) - set(test_results))
+        missing_validation = sorted(set(test_results) - set(validation_results))
+        details = []
+        if missing_test:
+            details.append(f"missing from test: {', '.join(missing_test)}")
+        if missing_validation:
+            details.append(f"missing from validation: {', '.join(missing_validation)}")
+        raise ValueError("strategy sets differ between windows (" + "; ".join(details) + ")")
+
+    ranking = sorted(
+        validation_results.items(), key=lambda item: item[1]["total_return"], reverse=True
+    )
+    selected = ranking[0][0]
+    test_leader = max(test_results, key=lambda name: test_results[name]["total_return"])
+    return selected, test_leader, ranking
+
+
 def test_summary() -> dict[str, Any] | None:
     """Parse the pytest JUnit XML (real evidence of the last test run)."""
     if not PYTEST_XML.exists():
@@ -293,12 +327,10 @@ def write_summary(payload: dict[str, Any]) -> Path:
     benchmarks = payload["benchmarks"]
     strategy_names = list(test_results.keys())
     # Strategy choice is made on the validation window, never on the test window.
-    best_strategy = max(validation_results, key=lambda n: validation_results[n]["total_return"])
-    best_metrics = test_results[best_strategy]
-    test_leader = max(strategy_names, key=lambda n: test_results[n]["total_return"])
-    validation_ranking = sorted(
-        validation_results.items(), key=lambda item: item[1]["total_return"], reverse=True
+    best_strategy, test_leader, validation_ranking = select_strategy(
+        validation_results, test_results
     )
+    best_metrics = test_results[best_strategy]
     benchmark = benchmarks["spy_open_to_close_net"]
     buy_hold = benchmarks["spy_buy_and_hold_close_to_close"]
     tests = test_summary()
@@ -825,9 +857,8 @@ def write_rubric_checklist(payload: dict[str, Any]) -> Path:
     strategies = list(payload["backtests_test"].keys())
     test_rows = dataset["class_balance"]["test"]["rows"]
     # The strategy is selected on validation; the test CAGR below is descriptive.
-    best_strategy = max(
-        payload["backtests_validation"],
-        key=lambda name: payload["backtests_validation"][name]["total_return"],
+    best_strategy, _, _ = select_strategy(
+        payload["backtests_validation"], payload["backtests_test"]
     )
     best_cagr = payload["backtests_test"][best_strategy].get("cagr")
     bench_cagr = payload["benchmarks"]["spy_open_to_close_net"].get("cagr")
