@@ -252,13 +252,14 @@ Improvement ideas based on the error analysis:
 
 `python -m pytest -q --junitxml=reports/pytest.xml`
 
-50 deterministic tests cover: source schema, duplicate/bad-price cleaning,
+61 deterministic tests cover: source schema, duplicate/bad-price cleaning,
 macro forward-fill without back-fill, per-ticker lags, French-factor lag,
 no look-ahead under truncation, split purity and embargo, target definition,
 execution timing, empty-signal sessions, entry/exit fees, compounding,
 vector-vs-exact equivalence, one-position-per-session, threshold filtering,
 stop loss, benchmark alignment, paper-broker cash/position accounting and
-metric definitions.  The JUnit XML is committed as
+invalid-price guards, metric input validation, validation-window strategy
+selection, and metric definitions.  The JUnit XML is committed as
 evidence (`reports/pytest.xml`).
 
 ## 12. Automation modes

@@ -170,7 +170,7 @@ When the model was right, the average absolute next move was **0.78%**; when it 
 
 ## 9. Tests and environment
 
-* pytest: **50/50 passed**, 0 failed, 0 errors, 0 skipped (run at 2026-11-17T00:40:25Z, 4.357s). Raw JUnit XML: `reports/pytest.xml`.
+* pytest: **61/61 passed**, 0 failed, 0 errors, 0 skipped (run at 2026-11-17T01:09:12Z, 4.944s). Raw JUnit XML: `reports/pytest.xml`.
 * Environment: Python 3.12.10, pandas 2.3.2, numpy 2.3.3, scikit-learn 1.8.0, xgboost 3.4.1, yfinance 1.8.0.
 
 ## 10. Reproduce

@@ -281,7 +281,7 @@ stock-market-ml-trading-system/
 │   ├── run_pipeline.py        # CLI: --mode live | cached | report
 │   ├── broker.py              # paper-only broker adapter (refuses live orders)
 │   └── dashboard.py           # Streamlit monitoring dashboard
-├── tests/                     # 50 deterministic tests, no network access
+├── tests/                     # 61 deterministic tests, no network access
 ├── notebooks/research.ipynb   # executed end-to-end research notebook
 ├── docs/
 │   ├── methodology.md         # decisions, timing contract, limitations, scheduling
@@ -397,7 +397,7 @@ not claimed as verified.
 
 ## Tests
 
-50 deterministic tests, no network calls, no random seeds left loose:
+61 deterministic tests, no network calls, no random seeds left loose:
 
 * `tests/test_data_ingestion.py` — schema, cleaning, duplicate and impossible
   bar handling, incremental merge, cache manifest.
@@ -407,13 +407,17 @@ not claimed as verified.
   accounting, stop loss, benchmarks, threshold selection.
 * `tests/test_metrics.py` — CAGR (initial-capital convention and full session
   count), Sharpe, drawdown, win rate, profit factor and classification metrics
-  on known series.
+  on known series, plus guards against impossible returns and misaligned
+  probability scores.
 * `tests/test_models.py` — pipelines, date-grouped CV, determinism with the
   configured seed, probability ranges.
 * `tests/test_broker.py` — paper-broker cash and position accounting, rejected
-  sells, rejected-buy suppression and mark-to-market equity.
+  sells, rejected-buy suppression, mark-to-market equity and invalid
+  price/quantity guards.
+* `tests/test_report.py` — the summary selects strategies on validation and
+  reports the test leader ex post; malformed metrics blocks raise a clear error.
 
-Reference run: **50 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
+Reference run: **61 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
 `reports/pytest.xml`.
 
 ## Limitations
