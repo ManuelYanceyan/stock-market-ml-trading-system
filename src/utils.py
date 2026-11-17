@@ -58,15 +58,24 @@ def get_logger(name: str = "pipeline") -> logging.Logger:
 
 
 def write_json(path: Path, payload: Any) -> Path:
-    """Write JSON atomically (tmp file + replace) with UTF-8 encoding."""
+    """Write JSON atomically (tmp file + replace) with UTF-8 encoding.
+
+    If serialisation fails, the temporary file is removed and any existing
+    target is left untouched, so a failed run never truncates the artefact.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
+    handle = tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", delete=False, dir=path.parent, suffix=".tmp"
-    ) as handle:
-        json.dump(payload, handle, indent=2, ensure_ascii=False, default=str)
-        tmp_name = handle.name
-    Path(tmp_name).replace(path)
+    )
+    tmp_path = Path(handle.name)
+    try:
+        with handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False, default=str)
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
     return path
 
 
@@ -83,8 +92,12 @@ def save_parquet(frame: pd.DataFrame, path: Path) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    frame.to_parquet(tmp, index=False)
-    tmp.replace(path)
+    try:
+        frame.to_parquet(tmp, index=False)
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
     return path
 
 
