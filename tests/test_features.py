@@ -15,6 +15,7 @@ from src.build_features import (
     build_modeling_sample,
     get_feature_columns,
     split_frames,
+    validate_split_boundaries,
 )
 
 
@@ -153,6 +154,41 @@ def test_splits_are_chronological_and_do_not_overlap(sample_frame):
     assert not (signatures["train"] & signatures["validation"])
     assert not (signatures["validation"] & signatures["test"])
     assert not (signatures["train"] & signatures["test"])
+
+
+def test_overlapping_split_boundaries_are_rejected():
+    boundaries = {
+        "train": (pd.Timestamp("2015-01-01"), pd.Timestamp("2019-12-31")),
+        "validation": (pd.Timestamp("2019-12-31"), pd.Timestamp("2022-12-31")),
+        "test": (pd.Timestamp("2023-01-01"), pd.Timestamp("2262-01-01")),
+    }
+    with pytest.raises(ValueError, match="must start after"):
+        validate_split_boundaries(boundaries)
+
+
+def test_reversed_split_boundary_is_rejected():
+    boundaries = {
+        "train": (pd.Timestamp("2020-01-01"), pd.Timestamp("2019-12-31")),
+        "validation": (pd.Timestamp("2021-01-01"), pd.Timestamp("2022-12-31")),
+        "test": (pd.Timestamp("2023-01-01"), pd.Timestamp("2262-01-01")),
+    }
+    with pytest.raises(ValueError, match="starts after it ends"):
+        validate_split_boundaries(boundaries)
+
+
+def test_valid_split_boundaries_pass_validation():
+    boundaries = {
+        "train": (pd.Timestamp("2015-01-01"), pd.Timestamp("2019-12-31")),
+        "validation": (pd.Timestamp("2020-01-01"), pd.Timestamp("2022-12-31")),
+        "test": (pd.Timestamp("2023-01-01"), pd.Timestamp("2262-01-01")),
+    }
+    validate_split_boundaries(boundaries)
+
+
+def test_assign_splits_rejects_zero_embargo(sample_frame):
+    sample, _, _ = sample_frame
+    with pytest.raises(ValueError, match="embargo_days"):
+        assign_splits(sample, embargo_days=0)
 
 
 def test_label_windows_stay_inside_each_split(sample_frame):

@@ -359,6 +359,44 @@ def build_modeling_sample(
     return sample.reset_index(drop=True)
 
 
+def split_boundaries() -> dict[str, tuple[pd.Timestamp, pd.Timestamp]]:
+    """Configured chronological split windows (inclusive signal dates)."""
+    return {
+        "train": (pd.Timestamp(config.TRAIN_START), pd.Timestamp(config.TRAIN_END)),
+        "validation": (pd.Timestamp(config.VALID_START), pd.Timestamp(config.VALID_END)),
+        "test": (
+            pd.Timestamp(config.TEST_START),
+            pd.Timestamp(config.TEST_END) if config.TEST_END else pd.Timestamp("2262-01-01"),
+        ),
+    }
+
+
+def validate_split_boundaries(
+    boundaries: dict[str, tuple[pd.Timestamp, pd.Timestamp]],
+) -> None:
+    """Fail fast when configured split windows are reversed or overlap.
+
+    Overlapping windows would silently relabel rows because later splits
+    overwrite earlier ones, and the resulting validation/test contamination
+    would invalidate every reported metric.
+    """
+    previous_end: pd.Timestamp | None = None
+    previous_name: str | None = None
+    for name in ("train", "validation", "test"):
+        if name not in boundaries:
+            raise ValueError(f"missing split boundary for {name!r}")
+        start, end = (pd.Timestamp(value) for value in boundaries[name])
+        if start > end:
+            raise ValueError(f"{name} split starts after it ends ({start.date()} > {end.date()})")
+        if previous_end is not None and start <= previous_end:
+            raise ValueError(
+                f"{name} split must start after the {previous_name} split ends "
+                f"({start.date()} <= {previous_end.date()})"
+            )
+        previous_end = end
+        previous_name = name
+
+
 def assign_splits(
     sample: pd.DataFrame, embargo_days: int = config.SPLIT_EMBARGO_DAYS
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -369,14 +407,10 @@ def assign_splits(
     last ``embargo_days`` signal rows of each split are therefore dropped,
     which guarantees that no split uses prices from the next split.
     """
-    boundaries = {
-        "train": (pd.Timestamp(config.TRAIN_START), pd.Timestamp(config.TRAIN_END)),
-        "validation": (pd.Timestamp(config.VALID_START), pd.Timestamp(config.VALID_END)),
-        "test": (
-            pd.Timestamp(config.TEST_START),
-            pd.Timestamp(config.TEST_END) if config.TEST_END else pd.Timestamp("2262-01-01"),
-        ),
-    }
+    if embargo_days < 1:
+        raise ValueError("embargo_days must be at least 1 session")
+    boundaries = split_boundaries()
+    validate_split_boundaries(boundaries)
 
     sample = sample.copy()
     sample["split"] = None
