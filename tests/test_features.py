@@ -107,6 +107,24 @@ def test_macro_features_are_lagged(synthetic_macro, feature_panel):
         assert actual == pytest.approx(expected)
 
 
+def test_french_factors_use_only_values_available_five_sessions_earlier(
+    synthetic_factors, feature_panel
+):
+    from src.build_features import FACTOR_LAG_SESSIONS
+
+    frame, _ = feature_panel
+    calendar = pd.DatetimeIndex(sorted(synthetic_factors["date"].unique()))
+    target = calendar[300]
+    expected = (
+        synthetic_factors.set_index("date")["ff_mkt_rf"]
+        .sort_index()
+        .loc[calendar[300 - FACTOR_LAG_SESSIONS]]
+    )
+
+    row = frame[(frame["date"] == target) & (frame["ticker"] == "SPY")].iloc[0]
+    assert row["ff_mkt_rf_lag5"] == pytest.approx(expected)
+
+
 def test_rolling_features_only_use_past(feature_panel):
     frame, _ = feature_panel
     group = frame[frame["ticker"] == "SPY"].sort_values("date").reset_index(drop=True)

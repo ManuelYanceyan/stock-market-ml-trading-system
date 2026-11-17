@@ -7,10 +7,12 @@
 ## 1. Headline results (test window, after costs)
 
 * Selected model: **xgboost**, probability threshold **0.70** (chosen on the validation window only).
-* Best net strategy: **S4_risk_managed** -> net total return **19.17%**, CAGR **4.66%**, Sharpe **0.64**, max drawdown **-5.20%**, 63 trades.
-* Like-for-like benchmark (SPY open-to-close, same costs): **-26.15%** net total return, CAGR **-7.60%**, Sharpe **-0.56**.
-* Difference vs benchmark: **+45.32 percentage points** of total return (+12.26 pp of CAGR). The strategy beat the benchmark in this test window.
-* Buy & hold SPY (close-to-close, **different holding period**, context only): total return **105.97%**, CAGR **20.67%**.
+* Strategy selected on the **validation** window: **S4_risk_managed** (highest net total return there). Validation ranking: S4_risk_managed 68.55%, S1_top_probability 62.89%, S3_trend_filter 9.17%, S2_conservative 6.49%.
+* Test-window result for that same validation-selected strategy: net total return **19.17%**, CAGR **4.66%**, Sharpe **0.64**, max drawdown **-5.20%**, 63 trades.
+* **S4_risk_managed was also the highest-returning strategy on the test window.** That test ranking is reported ex post and was **not** used to select the strategy; all four strategies are disclosed.
+* Like-for-like benchmark (SPY open-to-close, same costs): **-26.15%** net total return, CAGR **-7.57%**, Sharpe **-0.56**.
+* Difference vs benchmark: **+45.32 percentage points** of total return (+12.24 pp of CAGR). The strategy beat the benchmark in this test window.
+* Buy & hold SPY (close-to-close, **different holding period**, context only): total return **105.97%**, CAGR **20.65%**.
 * **Gross comparison (no costs):** S4_risk_managed 23.75% vs the SPY open-to-close benchmark 32.16% (-8.41 pp). **Gross of costs the strategy did not beat the always-invested intraday benchmark**; its net advantage comes from trading only 6.49% of the sessions, not from a stronger signal.
 * Benchmark cost note: the like-for-like SPY open-to-close benchmark holds a position in all 970 test sessions, so its net result is **-58.31%** below its gross result (net -26.15% vs gross 32.16%). The strategies trade far less often; that difference in trading frequency is part of the result, not evidence of a stronger signal.
 
@@ -55,8 +57,8 @@ Costs: 1.0 bps commission + 2.0 bps slippage per side (**3.0 bps per side**), ch
 | S2_conservative | 3.60% | 4.97% | 0.92% | 0.44 | -2.35% | 2.16% | 22 | 2.27% | 50.00% |
 | S3_trend_filter | 3.88% | 5.90% | 0.99% | 0.37 | -5.70% | 2.81% | 32 | 3.30% | 50.00% |
 | S4_risk_managed | 19.17% | 23.75% | 4.66% | 0.64 | -5.20% | 7.50% | 63 | 6.49% | 50.79% |
-| BENCHMARK SPY open-to-close (net) | -26.15% | 32.16% | -7.60% | -0.56 | -35.41% | 12.66% | every session | 100% | 49.90% |
-| SPY buy & hold (different period) | 105.97% | n/a | 20.67% | 1.32 | -18.76% | 15.05% | 1 position held | n/a | 55.88% |
+| BENCHMARK SPY open-to-close (net) | -26.15% | 32.16% | -7.57% | -0.56 | -35.41% | 12.66% | every session | 100% | 49.90% |
+| SPY buy & hold (different period) | 105.97% | n/a | 20.65% | 1.32 | -18.76% | 15.05% | 1 position held | n/a | 55.88% |
 
 The four strategies are described in `src/backtest.py`: S1 (best probability above the validation threshold), S2 (+0.05 threshold and VIX <= 25), S3 (only when SPY is above its 50-day average) and S4 (probability-scaled size + 1% stop loss).
 
@@ -168,7 +170,7 @@ When the model was right, the average absolute next move was **0.78%**; when it 
 
 ## 9. Tests and environment
 
-* pytest: **42/42 passed**, 0 failed, 0 errors, 0 skipped (run at 2026-11-16T00:54:31Z, 4.554s). Raw JUnit XML: `reports/pytest.xml`.
+* pytest: **50/50 passed**, 0 failed, 0 errors, 0 skipped (run at 2026-11-17T00:40:25Z, 4.357s). Raw JUnit XML: `reports/pytest.xml`.
 * Environment: Python 3.12.10, pandas 2.3.2, numpy 2.3.3, scikit-learn 1.8.0, xgboost 3.4.1, yfinance 1.8.0.
 
 ## 10. Reproduce

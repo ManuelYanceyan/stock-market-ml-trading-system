@@ -80,8 +80,15 @@ borrow a future one.
 Daily Fama-French 5 factors plus momentum, expressed as decimals (the files
 report percent).  The public daily files are updated with a publication delay,
 so a **5-session lag** is applied and the series is forward-filled from the
-past; this is conservative but the exact publication timestamp is not knowable
-historically (see `docs/methodology.md`, limitations).
+past.
+
+**Residual point-in-time risk.** The key-free download is a final-vintage
+snapshot: it does not preserve the values that were published on each historical
+date.  The five-session shift removes same-day availability, but later revisions
+of a factor value can still be embedded in an earlier feature row, and the true
+monthly refresh date can be later than five sessions.  A strictly point-in-time
+backtest would need archived vintage files or the factor block removed; the
+limitation is disclosed in `docs/methodology.md` (§13) and the README.
 
 | Feature | Definition |
 | --- | --- |

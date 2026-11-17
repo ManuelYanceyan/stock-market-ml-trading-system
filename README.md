@@ -97,11 +97,17 @@ rows). Costs are **1 bp commission + 2 bp slippage per side**, charged on entry
 | `S2_conservative` | +3.60% | +4.97% | +0.92% | 0.44 | −2.35% | 22 | 2.3% |
 | `S3_trend_filter` | +3.88% | +5.90% | +0.99% | 0.37 | −5.70% | 32 | 3.3% |
 | `S4_risk_managed` | **+19.17%** | +23.75% | +4.66% | 0.64 | −5.20% | 63 | 6.5% |
-| SPY open-to-close benchmark (same costs) | **−26.15%** | +32.16% | −7.60% | −0.56 | −35.41% | every session | 100% |
-| SPY buy & hold (different holding period) | +105.97% | n/a | +20.67% | 1.32 | −18.76% | 1 position | 100% |
+| SPY open-to-close benchmark (same costs) | **−26.15%** | +32.16% | −7.57% | −0.56 | −35.41% | every session | 100% |
+| SPY buy & hold (different holding period) | +105.97% | n/a | +20.65% | 1.32 | −18.76% | 1 position | 100% |
 
 Best model selected on the **validation** window: **XGBoost**, probability
 threshold **0.70**. Test ROC-AUC is **0.511**, i.e. barely above chance.
+
+The four strategies are ranked on **validation**, not on test. Validation net
+returns were: **S4 +68.55%**, S1 +62.89%, S3 +9.17%, S2 +6.49%. **S4 was the
+validation leader and also the highest-returning strategy on the test window**
+(+19.17% vs +19.05% for S1). The test ranking is reported ex post for
+transparency; it was **not** used to select or promote a strategy.
 
 ### Honest reading of the results
 
@@ -151,8 +157,13 @@ not break the pipeline.
 
 **Timing of external data.** FRED series are lagged **one session**; French
 factors are lagged **five sessions** because the daily files are updated with a
-publication delay (monthly refresh). This is conservative and documented as a
-limitation: the factor features are stale by design rather than leaking.
+publication delay (monthly refresh). The five-session shift removes same-day
+availability, but it is **not a full point-in-time reconstruction**: the
+key-free files are final-vintage snapshots, so later revisions of a factor value
+can still be embedded in an earlier feature row, and the true monthly refresh
+can arrive later than five sessions. A strict point-in-time backtest would need
+archived vintages or the factor block removed. The residual risk is disclosed
+rather than hidden; see `docs/methodology.md` §13 and the data dictionary.
 
 **Data actually used in the reference run**
 
@@ -270,7 +281,7 @@ stock-market-ml-trading-system/
 │   ├── run_pipeline.py        # CLI: --mode live | cached | report
 │   ├── broker.py              # paper-only broker adapter (refuses live orders)
 │   └── dashboard.py           # Streamlit monitoring dashboard
-├── tests/                     # 42 deterministic tests, no network access
+├── tests/                     # 50 deterministic tests, no network access
 ├── notebooks/research.ipynb   # executed end-to-end research notebook
 ├── docs/
 │   ├── methodology.md         # decisions, timing contract, limitations, scheduling
@@ -386,7 +397,7 @@ not claimed as verified.
 
 ## Tests
 
-42 deterministic tests, no network calls, no random seeds left loose:
+50 deterministic tests, no network calls, no random seeds left loose:
 
 * `tests/test_data_ingestion.py` — schema, cleaning, duplicate and impossible
   bar handling, incremental merge, cache manifest.
@@ -394,12 +405,15 @@ not claimed as verified.
   boundaries, duplicate keys, and the truncation-based no-look-ahead test.
 * `tests/test_backtest.py` — vectorised vs exact simulation, compounding, cost
   accounting, stop loss, benchmarks, threshold selection.
-* `tests/test_metrics.py` — CAGR, Sharpe, drawdown, win rate, profit factor and
-  classification metrics on known series.
+* `tests/test_metrics.py` — CAGR (initial-capital convention and full session
+  count), Sharpe, drawdown, win rate, profit factor and classification metrics
+  on known series.
 * `tests/test_models.py` — pipelines, date-grouped CV, determinism with the
   configured seed, probability ranges.
+* `tests/test_broker.py` — paper-broker cash and position accounting, rejected
+  sells, rejected-buy suppression and mark-to-market equity.
 
-Reference run: **42 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
+Reference run: **50 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
 `reports/pytest.xml`.
 
 ## Limitations

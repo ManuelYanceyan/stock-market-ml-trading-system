@@ -16,11 +16,32 @@ def test_equity_curve_compounds():
     assert equity.iloc[-1] == pytest.approx(expected)
 
 
-def test_cagr_matches_annualisation():
+def test_cagr_uses_initial_capital_and_full_session_count():
     returns = pd.Series([0.001] * 504, index=pd.bdate_range("2020-01-01", periods=504))
-    equity = metrics.equity_curve(returns)
-    expected = (equity.iloc[-1] / equity.iloc[0]) ** (252 / 504) - 1
-    assert metrics.cagr(equity) == pytest.approx(expected)
+    initial_capital = 10_000.0
+    equity = metrics.equity_curve(returns, initial_capital=initial_capital)
+    expected = (equity.iloc[-1] / initial_capital) ** (252 / 504) - 1
+    assert metrics.cagr(equity, initial_capital=initial_capital) == pytest.approx(expected)
+
+
+def test_cagr_does_not_drop_the_first_session():
+    """``equity_curve`` already compounds the first return into ``equity[0]``."""
+    initial_capital = 1_000.0
+    returns = pd.Series([0.10, 0.0], index=pd.bdate_range("2024-01-01", periods=2))
+    equity = metrics.equity_curve(returns, initial_capital=initial_capital)
+    expected = (1_100.0 / initial_capital) ** (252 / 2) - 1
+    assert metrics.cagr(equity, initial_capital=initial_capital) == pytest.approx(expected)
+    # Ignoring the initial capital would annualise only the second session.
+    assert metrics.cagr(equity) == pytest.approx((1_100.0 / 1_100.0) ** 126 - 1)
+    assert metrics.cagr(equity, initial_capital=initial_capital) != pytest.approx(metrics.cagr(equity))
+
+
+def test_summary_cagr_uses_the_same_initial_capital():
+    returns = pd.Series([0.10, -0.20, 0.0], index=pd.bdate_range("2024-01-01", periods=3))
+    result = metrics.summarize_performance(returns, initial_capital=1_000.0)
+    expected = (880.0 / 1_000.0) ** (252 / 3) - 1
+    assert result["cagr"] == pytest.approx(expected)
+    assert result["calmar_ratio"] == pytest.approx(expected / abs(result["max_drawdown"]))
 
 
 def test_max_drawdown_is_negative_peak_to_trough():

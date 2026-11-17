@@ -289,10 +289,16 @@ def write_summary(payload: dict[str, Any]) -> Path:
     dataset = payload["dataset"]
     best = payload["best_model"]
     test_results = payload["backtests_test"]
+    validation_results = payload["backtests_validation"]
     benchmarks = payload["benchmarks"]
     strategy_names = list(test_results.keys())
-    best_strategy = max(strategy_names, key=lambda n: test_results[n]["total_return"])
+    # Strategy choice is made on the validation window, never on the test window.
+    best_strategy = max(validation_results, key=lambda n: validation_results[n]["total_return"])
     best_metrics = test_results[best_strategy]
+    test_leader = max(strategy_names, key=lambda n: test_results[n]["total_return"])
+    validation_ranking = sorted(
+        validation_results.items(), key=lambda item: item[1]["total_return"], reverse=True
+    )
     benchmark = benchmarks["spy_open_to_close_net"]
     buy_hold = benchmarks["spy_buy_and_hold_close_to_close"]
     tests = test_summary()
@@ -423,11 +429,30 @@ def write_summary(payload: dict[str, Any]) -> Path:
         f"* Selected model: **{best['name']}**, probability threshold **{best['threshold']:.2f}** "
         "(chosen on the validation window only)."
     )
-    lines.append(
-        f"* Best net strategy: **{best_strategy}** -> net total return **{pct(best_metrics['total_return'])}**, "
-        f"CAGR **{pct(best_metrics['cagr'])}**, Sharpe **{num(best_metrics['sharpe_ratio'], 2)}**, "
-        f"max drawdown **{pct(best_metrics['max_drawdown'])}**, {best_metrics['total_trades']:,} trades."
+    validation_text = ", ".join(
+        f"{name} {pct(values['total_return'])}" for name, values in validation_ranking
     )
+    lines.append(
+        f"* Strategy selected on the **validation** window: **{best_strategy}** (highest net total "
+        f"return there). Validation ranking: {validation_text}."
+    )
+    lines.append(
+        f"* Test-window result for that same validation-selected strategy: net total return "
+        f"**{pct(best_metrics['total_return'])}**, CAGR **{pct(best_metrics['cagr'])}**, "
+        f"Sharpe **{num(best_metrics['sharpe_ratio'], 2)}**, max drawdown "
+        f"**{pct(best_metrics['max_drawdown'])}**, {best_metrics['total_trades']:,} trades."
+    )
+    if test_leader == best_strategy:
+        lines.append(
+            f"* **{best_strategy} was also the highest-returning strategy on the test window.** "
+            "That test ranking is reported ex post and was **not** used to select the strategy; "
+            "all four strategies are disclosed."
+        )
+    else:
+        lines.append(
+            f"* The highest-returning strategy on the test window was **{test_leader}**, not the "
+            "validation-selected one. This is reported ex post and was **not** used for selection."
+        )
     lines.append(
         f"* Like-for-like benchmark (SPY open-to-close, same costs): "
         f"**{pct(benchmark['total_return'])}** net total return, CAGR **{pct(benchmark['cagr'])}**, "
@@ -799,7 +824,11 @@ def write_rubric_checklist(payload: dict[str, Any]) -> Path:
     models = [m for m in payload["classification"].keys()]
     strategies = list(payload["backtests_test"].keys())
     test_rows = dataset["class_balance"]["test"]["rows"]
-    best_strategy = max(strategies, key=lambda name: payload["backtests_test"][name]["total_return"])
+    # The strategy is selected on validation; the test CAGR below is descriptive.
+    best_strategy = max(
+        payload["backtests_validation"],
+        key=lambda name: payload["backtests_validation"][name]["total_return"],
+    )
     best_cagr = payload["backtests_test"][best_strategy].get("cagr")
     bench_cagr = payload["benchmarks"]["spy_open_to_close_net"].get("cagr")
     buy_hold_cagr = payload["benchmarks"]["spy_buy_and_hold_close_to_close"].get("cagr")
@@ -844,7 +873,9 @@ def write_rubric_checklist(payload: dict[str, Any]) -> Path:
              status="DONE",
              evidence="src/download_data.py::fetch_french_factors; README 'Data sources'.",
              notes="Kenneth R. French Data Library (Fama-French 5 factors + momentum, daily) is downloaded "
-                   "directly from Dartmouth as a key-free CSV/ZIP and used as lagged features."),
+                   "directly from Dartmouth as a key-free CSV/ZIP and used as lagged features. Residual "
+                   "point-in-time risk is documented: the 5-session shift reduces but cannot remove revisions "
+                   "published later, because key-free files are not vintage snapshots."),
         dict(section="2. Data sources", points="1",
              criterion="Large dataset with > 1 million records",
              status="NOT DONE",
@@ -943,7 +974,8 @@ def write_rubric_checklist(payload: dict[str, Any]) -> Path:
              criterion="Exceptional profitability vs a realistic benchmark",
              status="PARTIAL",
              evidence="reports/summary.md section 1; reports/metrics.json -> backtests_test and benchmarks.",
-             notes=f"{best_strategy} has CAGR {pct(best_cagr)} vs {pct(bench_cagr)} for the like-for-like SPY "
+             notes=f"On the test window, {best_strategy} (selected on validation) has CAGR "
+                   f"{pct(best_cagr)} vs {pct(bench_cagr)} for the like-for-like SPY "
                    f"open-to-close benchmark (same dates and costs), but SPY buy & hold has CAGR {pct(buy_hold_cagr)} "
                    "over the same period and the best strategy's daily-return t-statistic is below 2. The comparison "
                    "is real; the word 'exceptional' is not justified, so the point is claimed only partially."),

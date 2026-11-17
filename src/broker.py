@@ -6,6 +6,8 @@ boundary explicit:
 
 * no credentials are read, stored or transmitted;
 * ``PaperBroker`` only records simulated fills in ``reports/orders_simulated.csv``;
+* the broker tracks cash **and** open positions: a sell without enough
+  holdings is rejected, and a rejected buy cannot trigger a sell;
 * constructing a "live" broker raises, so a caller cannot accidentally trade.
 
 A real integration (Alpaca, IBKR, ...) would implement the same ``place_order``
@@ -63,6 +65,8 @@ class PaperBroker:
         self.slippage_bps = float(slippage_bps)
         self.log_path = Path(log_path)
         self.orders: list[Order] = []
+        self.positions: dict[str, float] = {}
+        self.last_prices: dict[str, float] = {}
         ensure_directories()
 
     # -- internal ---------------------------------------------------------
@@ -99,7 +103,29 @@ class PaperBroker:
             logger.warning("Order rejected (cash): %s", order)
             return order
 
+        if order.side == "sell":
+            held = self.positions.get(order.ticker, 0.0)
+            if order.quantity > held + 1e-9:
+                order.status = "rejected_insufficient_position"
+                self._append_log(order)
+                logger.warning(
+                    "Order rejected (position): sell %.4f %s but only %.4f held",
+                    order.quantity,
+                    order.ticker,
+                    held,
+                )
+                return order
+
         self.cash += (-notional - commission) if order.side == "buy" else (notional - commission)
+        if order.side == "buy":
+            self.positions[order.ticker] = self.positions.get(order.ticker, 0.0) + order.quantity
+        else:
+            remaining = self.positions.get(order.ticker, 0.0) - order.quantity
+            if remaining > 1e-9:
+                self.positions[order.ticker] = remaining
+            else:
+                self.positions.pop(order.ticker, None)
+        self.last_prices[order.ticker] = fill
         order.filled_price = round(fill, 6)
         order.status = "filled_paper"
         order.order_id = order.order_id or f"paper-{len(self.orders) + 1:05d}"
@@ -108,17 +134,52 @@ class PaperBroker:
         logger.info("Paper fill: %s %s %.4f @ %.4f", order.side, order.ticker, order.quantity, fill)
         return order
 
-    def equity(self, prices: dict[str, float]) -> float:
-        """Cash only: the strategy is flat at the end of every session."""
-        return self.cash
+    def equity(self, prices: dict[str, float] | None = None) -> float:
+        """Cash plus the mark-to-market value of open paper positions."""
+        marks = dict(self.last_prices)
+        if prices:
+            marks.update({ticker: float(price) for ticker, price in prices.items()})
+        holdings = sum(
+            quantity * marks.get(ticker, 0.0) for ticker, quantity in self.positions.items()
+        )
+        return float(self.cash + holdings)
 
-    def simulate_day(self, ticker: str, capital_fraction: float, open_price: float, close_price: float, session: str) -> tuple[Order, Order]:
-        """Buy at the open and sell at the close (paper only)."""
-        quantity = max(capital_fraction * self.cash / open_price, 0.0)
+    def simulate_day(
+        self,
+        ticker: str,
+        capital_fraction: float,
+        open_price: float,
+        close_price: float,
+        session: str,
+    ) -> tuple[Order, Order]:
+        """Buy at the open and sell at the close (paper only).
+
+        The quantity is sized so that the entry passes the cash check including
+        commission and slippage.  If the buy is rejected for any reason, the
+        matching sell is recorded as rejected and is **not** executed.
+        """
+        if open_price <= 0:
+            raise ValueError("open_price must be positive")
+        fill_open = self._apply_slippage("buy", float(open_price))
+        affordable = self.cash / (fill_open * (1.0 + self.commission_bps / 10_000.0))
+        quantity = max(float(capital_fraction) * affordable, 0.0)
         buy = self.place_order(
             Order(ticker=ticker, side="buy", quantity=quantity, reference_price=open_price,
                   session=session, reason="intraday entry at the open")
         )
+        if buy.status != "filled_paper":
+            sell = Order(
+                ticker=ticker,
+                side="sell",
+                quantity=quantity,
+                reference_price=close_price,
+                session=session,
+                reason=f"intraday exit skipped: buy {buy.status}",
+                status="rejected_buy_not_filled",
+            )
+            self._append_log(sell)
+            logger.warning("Sell skipped because the matching buy was not filled: %s", buy.status)
+            return buy, sell
         sell = self.place_order(
             Order(ticker=ticker, side="sell", quantity=quantity, reference_price=close_price,
                   session=session, reason="intraday exit at the close")

@@ -6,7 +6,8 @@ Conventions (used consistently in every report):
 * returns are simple daily returns, the risk-free rate is set to 0;
 * Sharpe = mean(daily) / std(daily, ddof=1) * sqrt(252);
 * annualised return = mean(daily) * 252 (arithmetic);
-* CAGR = (final / initial) ** (252 / number_of_sessions) - 1;
+* CAGR = (final_equity / initial_capital) ** (252 / number_of_sessions) - 1,
+  where ``number_of_sessions`` is the full length of the return series;
 * max drawdown = min(equity / running_max(equity) - 1)  (negative number);
 * a "trade" is one intraday position (entry at the open, exit at the close).
 
@@ -39,11 +40,28 @@ def annualized_return(returns: pd.Series, periods_per_year: int = config.TRADING
     return float(returns.fillna(0.0).mean() * periods_per_year)
 
 
-def cagr(equity: pd.Series, periods_per_year: int = config.TRADING_DAYS_PER_YEAR) -> float:
-    if len(equity) < 2 or equity.iloc[0] <= 0:
+def cagr(
+    equity: pd.Series,
+    initial_capital: float | None = None,
+    periods_per_year: int = config.TRADING_DAYS_PER_YEAR,
+) -> float:
+    """Compound annual growth rate over the full session count.
+
+    ``equity`` is normally the curve produced by :func:`equity_curve`, whose
+    first value already includes the first session's return.  Pass the actual
+    ``initial_capital`` so that the growth rate spans the whole session count;
+    falling back to ``equity.iloc[0]`` silently drops that first session and is
+    only intended for callers that provide a raw equity series starting at the
+    initial capital.
+    """
+    sessions = len(equity)
+    if sessions < 2:
         return float("nan")
-    growth = equity.iloc[-1] / equity.iloc[0]
-    years = len(equity) / periods_per_year
+    start = float(equity.iloc[0] if initial_capital is None else initial_capital)
+    if start <= 0:
+        return float("nan")
+    growth = float(equity.iloc[-1]) / start
+    years = sessions / periods_per_year
     if growth <= 0 or years <= 0:
         return float("nan")
     return float(growth ** (1.0 / years) - 1.0)
@@ -137,6 +155,8 @@ def summarize_performance(
     drawdown = drawdown_curve(equity)
     total_return = float(equity.iloc[-1] / initial_capital - 1.0)
     n_sessions = int(len(returns))
+    cagr_value = cagr(equity, initial_capital=initial_capital, periods_per_year=periods_per_year)
+    max_dd = max_drawdown(equity)
 
     summary: dict[str, Any] = {
         "sessions": n_sessions,
@@ -145,17 +165,13 @@ def summarize_performance(
         "initial_capital": float(initial_capital),
         "final_equity": float(equity.iloc[-1]),
         "total_return": total_return,
-        "cagr": cagr(equity, periods_per_year),
+        "cagr": cagr_value,
         "annualized_return_arithmetic": annualized_return(returns, periods_per_year),
         "annualized_volatility": annualized_volatility(returns, periods_per_year),
         "sharpe_ratio": sharpe_ratio(returns, periods_per_year),
         "sortino_ratio": sortino_ratio(returns, periods_per_year),
-        "max_drawdown": max_drawdown(equity),
-        "calmar_ratio": (
-            float(cagr(equity, periods_per_year) / abs(max_drawdown(equity)))
-            if max_drawdown(equity) < 0
-            else None
-        ),
+        "max_drawdown": max_dd,
+        "calmar_ratio": (float(cagr_value / abs(max_dd)) if max_dd < 0 else None),
         "best_day": float(returns.max()),
         "worst_day": float(returns.min()),
         "positive_day_share": float((returns > 0).mean()),

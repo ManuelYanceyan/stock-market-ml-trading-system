@@ -35,7 +35,11 @@ At the close of session **t** we only know data up to **t**:
 * Every technical feature is a rolling window that **ends at t**.
 * FRED series are re-indexed on the session calendar, forward-filled from the
   past and shifted by **one session**.
-* French factors are shifted by **five sessions** (publication lag).
+* French factors are re-indexed on the session calendar, forward-filled from
+  the past and shifted by **five sessions** (publication lag).  This removes
+  same-day availability, but it is **not** a full point-in-time reconstruction:
+  the key-free daily files are final-vintage snapshots, so later revisions of a
+  factor value can still be embedded in an earlier feature row (see §13).
 * The label uses `shift(-1)` on the *same ticker*, so an ETF is never compared
   with another ETF's session.
 * The last signal of each split is dropped when its label window would cross
@@ -156,7 +160,12 @@ The model with the best validation net return is then evaluated on the test
 window.  The candidate table is stored in
 `reports/tables/threshold_candidates.csv`.
 
-The test window never influences the threshold or the model choice.
+The test window never influences the threshold or the model choice.  The same
+rule applies to the four trading strategies: they are ranked on the validation
+window, and the validation leader (**S4_risk_managed** in the reference run) is
+reported on the test window.  S4 was also the highest-returning strategy on the
+test window, but that coincidence is reported **ex post**; the test ranking is
+descriptive and was not used to choose or promote a strategy.
 
 ## 8. Trading strategies
 
@@ -191,7 +200,8 @@ benchmark pays exactly the same costs.
 
 * One year = 252 sessions.
 * Total return = final equity / initial capital − 1 (compounded).
-* CAGR = `(final / initial)^(252 / sessions) - 1`.
+* CAGR = `(final / initial_capital)^(252 / sessions) - 1`, using the full
+  session count, so the first session is never dropped.
 * Annualised return = mean daily return × 252 (arithmetic).
 * Volatility = std(daily, ddof=1) × √252.
 * Sharpe = mean/std × √252, risk-free rate = 0.
@@ -242,12 +252,13 @@ Improvement ideas based on the error analysis:
 
 `python -m pytest -q --junitxml=reports/pytest.xml`
 
-42 deterministic tests cover: source schema, duplicate/bad-price cleaning,
-macro forward-fill without back-fill, per-ticker lags, no look-ahead under
-truncation, split purity and embargo, target definition, execution timing,
-empty-signal sessions, entry/exit fees, compounding, vector-vs-exact
-equivalence, one-position-per-session, threshold filtering, stop loss,
-benchmark alignment and metric definitions.  The JUnit XML is committed as
+50 deterministic tests cover: source schema, duplicate/bad-price cleaning,
+macro forward-fill without back-fill, per-ticker lags, French-factor lag,
+no look-ahead under truncation, split purity and embargo, target definition,
+execution timing, empty-signal sessions, entry/exit fees, compounding,
+vector-vs-exact equivalence, one-position-per-session, threshold filtering,
+stop loss, benchmark alignment, paper-broker cash/position accounting and
+metric definitions.  The JUnit XML is committed as
 evidence (`reports/pytest.xml`).
 
 ## 12. Automation modes
@@ -290,10 +301,20 @@ push; it has no schedule.
 
 * **Vendor and data revisions**: adjusted prices are restated when dividends or
   splits occur; a re-run on a later date can produce slightly different history.
-* **Publication delays**: FRED series are lagged one session, but exact
-  real-time vintages are not available without ALFRED; French factors are
-  published with a longer delay and are lagged five sessions, which is still an
-  approximation.
+* **Publication delays and data vintages**: FRED series are lagged one session,
+  but exact real-time vintages are not available without ALFRED.  French
+  factors are lagged five sessions, which is still an approximation:
+  * the public daily files are refreshed on a monthly cadence, so the true
+    availability of the most recent month is often later than five sessions;
+  * the downloaded file contains **final, subsequently revised** values, not a
+    vintage snapshot, so a historical factor row can embed revisions published
+    after the simulated decision date;
+  * the five-session shift therefore removes same-day and next-day leakage, but
+    it cannot guarantee a strict point-in-time feature set.  The residual risk
+    is most relevant for the newest observations; eliminating it would require
+    archived vintage files (not available key-free) or dropping the factor
+    block.  Factor importance is reported in `reports/figures/09_feature_importance.png`
+    so the reader can judge the exposure.
 * **Costs and liquidity**: 3 bps per side is optimistic for a retail account;
   the model assumes fills exactly at the open and the close.
 * **Stop loss**: daily bars cannot reproduce intraday path; the −1% exit is an
