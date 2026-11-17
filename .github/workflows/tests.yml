@@ -29,6 +29,9 @@ jobs:
       - name: Run test-suite (offline, deterministic fixtures)
         run: python -m pytest -q --junitxml=reports/pytest.xml
 
+      - name: Validate report artefacts
+        run: python -m src.validate_reports
+
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
