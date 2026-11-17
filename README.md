@@ -281,7 +281,7 @@ stock-market-ml-trading-system/
 │   ├── run_pipeline.py        # CLI: --mode live | cached | report
 │   ├── broker.py              # paper-only broker adapter (refuses live orders)
 │   └── dashboard.py           # Streamlit monitoring dashboard
-├── tests/                     # 61 deterministic tests, no network access
+├── tests/                     # 79 deterministic tests, no network access
 ├── notebooks/research.ipynb   # executed end-to-end research notebook
 ├── docs/
 │   ├── methodology.md         # decisions, timing contract, limitations, scheduling
@@ -333,6 +333,12 @@ python -m src.run_pipeline --mode report
 # Tests (no network needed) and JUnit evidence.
 python -m pytest -q --junitxml=reports/pytest.xml
 
+# Pre-flight: interpreter, dependencies and committed report artefacts.
+python -m src.check_environment
+
+# Validate metrics.json and the figures/tables it references.
+python -m src.validate_reports
+
 # Executed research notebook (outputs are already stored in the repo).
 python -m jupyter nbconvert --to notebook --execute --inplace notebooks/research.ipynb
 
@@ -371,8 +377,8 @@ not claimed as verified.
 
 ## Deployment options
 
-* **CI:** `.github/workflows/tests.yml` runs the test suite on every push and
-  pull request (Ubuntu, Python 3.12).
+* **CI:** `.github/workflows/tests.yml` runs the test suite and the report
+  consistency check on every push and pull request (Ubuntu, Python 3.12).
 * **Scheduling:** `docs/methodology.md` documents a Windows Task Scheduler /
   cron entry that runs `--mode live` after the US close. It is deliberately
   **not enabled** in this repository, because publishing a scheduled live job
@@ -397,14 +403,16 @@ not claimed as verified.
 
 ## Tests
 
-61 deterministic tests, no network calls, no random seeds left loose:
+79 deterministic tests, no network calls, no random seeds left loose:
 
 * `tests/test_data_ingestion.py` — schema, cleaning, duplicate and impossible
-  bar handling, incremental merge, cache manifest.
+  bar handling, invalid volume, incremental merge, cache manifest.
 * `tests/test_features.py` — target construction, lag alignment, split
-  boundaries, duplicate keys, and the truncation-based no-look-ahead test.
+  boundaries and configuration guards, duplicate keys, and the
+  truncation-based no-look-ahead test.
 * `tests/test_backtest.py` — vectorised vs exact simulation, compounding, cost
-  accounting, stop loss, benchmarks, threshold selection.
+  accounting, stop loss, benchmarks, threshold selection and invalid
+  cost/session/weight guards.
 * `tests/test_metrics.py` — CAGR (initial-capital convention and full session
   count), Sharpe, drawdown, win rate, profit factor and classification metrics
   on known series, plus guards against impossible returns and misaligned
@@ -416,8 +424,12 @@ not claimed as verified.
   price/quantity guards.
 * `tests/test_report.py` — the summary selects strategies on validation and
   reports the test leader ex post; malformed metrics blocks raise a clear error.
+* `tests/test_environment.py` — Python minimum, dependency imports and required
+  artefact checks used by the pre-flight CLI.
+* `tests/test_validate_reports.py` — metrics/benchmark session consistency and
+  missing figure/table detection.
 
-Reference run: **61 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
+Reference run: **79 passed** (Python 3.12.10, pytest 9.2.0). Evidence:
 `reports/pytest.xml`.
 
 ## Limitations

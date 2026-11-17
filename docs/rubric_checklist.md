@@ -4,7 +4,7 @@ Rubric source: <https://github.com/DataTalksClub/stock-markets-analytics-zoomcam
 
 **Self-assessment summary:** 28 criteria DONE, 4 PARTIAL, 2 NOT DONE. This is the student's own assessment against the published rubric; peer reviewers assign the actual score.
 
-Evidence snapshot: 17,892 modelling rows, test window 970 sessions / 5,820 rows, 7 models, 4 strategies, best model xgboost, 61/61 pytest tests passed (reports/pytest.xml).
+Evidence snapshot: 17,892 modelling rows, test window 970 sessions / 5,820 rows, 7 models, 4 strategies, best model xgboost, 79/79 pytest tests passed (reports/pytest.xml).
 
 | Section | Points | Criterion | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- |
