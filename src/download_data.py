@@ -318,6 +318,7 @@ def validate_ohlcv(frame: pd.DataFrame, retrieval_ts: str | None = None) -> tupl
     Cleaning rules (all counted in the report):
       * drop duplicated (date, ticker) rows keeping the last observation;
       * drop rows with non-positive or non-finite prices;
+      * drop rows with non-finite or negative volume;
       * drop rows where high < low or where open/close fall outside [low, high]
         beyond a small relative tolerance;
       * drop bars from the current (possibly incomplete) UTC date.
@@ -327,6 +328,7 @@ def validate_ohlcv(frame: pd.DataFrame, retrieval_ts: str | None = None) -> tupl
         "rules": [
             "duplicate (date, ticker) rows -> keep last",
             "non-positive or non-finite prices -> drop row",
+            "non-finite or negative volume -> drop row",
             "high < low or open/close outside [low, high] (1e-6 rel. tol) -> drop row",
             "bars dated today or later in UTC -> drop (session may be incomplete)",
             "zero-volume bars -> kept but counted",
@@ -361,6 +363,11 @@ def validate_ohlcv(frame: pd.DataFrame, retrieval_ts: str | None = None) -> tupl
     positive = (data[price_cols] > 0).all(axis=1)
     data = data[finite & positive]
     report["dropped_non_positive_or_non_finite"] = int(before - len(data))
+
+    before = len(data)
+    valid_volume = np.isfinite(data["volume"]) & (data["volume"] >= 0)
+    data = data[valid_volume]
+    report["dropped_invalid_volume"] = int(before - len(data))
 
     before = len(data)
     tolerance = 1e-6

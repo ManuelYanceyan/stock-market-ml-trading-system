@@ -53,6 +53,21 @@ def test_duplicates_and_bad_prices_are_removed(synthetic_ohlcv):
     assert np.isclose(kept["close"].iloc[0], duplicate["close"].iloc[0])
 
 
+def test_negative_or_missing_volume_rows_are_removed(synthetic_ohlcv):
+    dirty = synthetic_ohlcv.copy()
+    negative = dirty.iloc[[40]].copy()
+    negative["volume"] = -1
+    missing = dirty.iloc[[41]].copy()
+    missing["volume"] = np.nan
+    dirty = pd.concat([dirty, negative, missing], ignore_index=True)
+
+    clean, report = validate_ohlcv(dirty)
+
+    assert report["dropped_invalid_volume"] >= 2
+    assert np.isfinite(clean["volume"]).all()
+    assert (clean["volume"] >= 0).all()
+
+
 def test_missing_macro_observations_are_forward_filled_only(synthetic_macro):
     calendar = pd.bdate_range("2020-01-01", periods=10)
     macro = pd.DataFrame(
