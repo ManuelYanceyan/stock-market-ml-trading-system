@@ -16,6 +16,16 @@ def test_equity_curve_compounds():
     assert equity.iloc[-1] == pytest.approx(expected)
 
 
+def test_equity_curve_rejects_returns_below_minus_100_percent():
+    with pytest.raises(ValueError, match="-100%"):
+        metrics.equity_curve(pd.Series([0.01, -1.50]))
+
+
+def test_equity_curve_rejects_non_positive_initial_capital():
+    with pytest.raises(ValueError, match="initial_capital"):
+        metrics.equity_curve(pd.Series([0.01]), initial_capital=0.0)
+
+
 def test_cagr_uses_initial_capital_and_full_session_count():
     returns = pd.Series([0.001] * 504, index=pd.bdate_range("2020-01-01", periods=504))
     initial_capital = 10_000.0
@@ -77,6 +87,22 @@ def test_classification_metrics_are_consistent():
     assert result["f1"] == pytest.approx(0.5)
     assert result["base_rate_up"] == pytest.approx(0.5)
     assert result["roc_auc"] == pytest.approx(0.75)
+
+
+def test_classification_metrics_reject_invalid_inputs():
+    with pytest.raises(ValueError, match="same length"):
+        metrics.classification_metrics(pd.Series([1, 0]), pd.Series([0.8]), threshold=0.5)
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        metrics.classification_metrics(pd.Series([1, 2]), pd.Series([0.8, 0.2]), threshold=0.5)
+    with pytest.raises(ValueError, match="finite"):
+        metrics.classification_metrics(pd.Series([1, 0]), pd.Series([0.8, np.nan]), threshold=0.5)
+
+
+def test_brier_score_aligns_by_position_not_index():
+    y_true = pd.Series([1, 0], index=[10, 11])
+    probabilities = pd.Series([0.9, 0.1], index=[0, 1])
+
+    assert metrics.brier_score(y_true, probabilities) == pytest.approx(0.01)
 
 
 def test_brier_score():

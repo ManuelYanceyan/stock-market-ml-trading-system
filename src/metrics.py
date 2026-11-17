@@ -26,9 +26,20 @@ import config
 
 
 def equity_curve(returns: pd.Series, initial_capital: float = config.INITIAL_CAPITAL) -> pd.Series:
-    """Compound a return series into an equity curve."""
-    returns = returns.fillna(0.0).astype(float)
-    return initial_capital * (1.0 + returns).cumprod()
+    """Compound a return series into an equity curve.
+
+    Missing returns are treated as flat sessions.  Infinite values and returns
+    below -100% are rejected because they cannot come from an unlevered,
+    long-only simulation and would silently poison every downstream metric.
+    """
+    if not np.isfinite(initial_capital) or initial_capital <= 0:
+        raise ValueError("initial_capital must be a finite positive number")
+    values = pd.Series(returns).fillna(0.0).astype(float)
+    if not np.isfinite(values.to_numpy()).all():
+        raise ValueError("returns must be finite (NaN is treated as a flat session)")
+    if (values < -1.0).any():
+        raise ValueError("simple returns cannot be below -100%")
+    return initial_capital * (1.0 + values).cumprod()
 
 
 def drawdown_curve(equity: pd.Series) -> pd.Series:
@@ -199,6 +210,14 @@ def classification_metrics(y_true: pd.Series, probabilities: pd.Series, threshol
 
     y_true = pd.Series(y_true).astype(int).reset_index(drop=True)
     probabilities = pd.Series(probabilities).astype(float).reset_index(drop=True)
+    if len(y_true) != len(probabilities):
+        raise ValueError("y_true and probabilities must have the same length")
+    if y_true.empty:
+        raise ValueError("classification metrics require at least one observation")
+    if not y_true.isin([0, 1]).all():
+        raise ValueError("y_true must contain only 0 and 1")
+    if not np.isfinite(probabilities.to_numpy()).all():
+        raise ValueError("probabilities must be finite")
     predictions = (probabilities >= threshold).astype(int)
 
     tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[0, 1]).ravel()
@@ -225,6 +244,13 @@ def classification_metrics(y_true: pd.Series, probabilities: pd.Series, threshol
 
 
 def brier_score(y_true: pd.Series, probabilities: pd.Series) -> float:
+    """Mean squared error of the probabilities, aligned positionally."""
     y_true = pd.Series(y_true).astype(float).reset_index(drop=True)
     probabilities = pd.Series(probabilities).astype(float).reset_index(drop=True)
+    if len(y_true) != len(probabilities):
+        raise ValueError("y_true and probabilities must have the same length")
+    if y_true.empty:
+        raise ValueError("Brier score requires at least one observation")
+    if not np.isfinite(probabilities.to_numpy()).all():
+        raise ValueError("probabilities must be finite")
     return float(((probabilities - y_true) ** 2).mean())
