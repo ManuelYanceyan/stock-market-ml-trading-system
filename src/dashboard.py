@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 import config
+from src.report import select_strategy
 
 METRICS_PATH = config.REPORTS_DIR / "metrics.json"
 
@@ -35,6 +36,31 @@ def _pct(value) -> str:
         return "n/a"
 
 
+def performance_table(payload: dict) -> pd.DataFrame:
+    """One row per strategy, indexed by strategy name."""
+    return pd.DataFrame(payload["backtests_test"]).T
+
+
+def selected_strategy(payload: dict) -> tuple[str, str]:
+    """Return ``(validation-selected, test leader)`` without using test data to choose."""
+    selected, leader, _ = select_strategy(
+        payload["backtests_validation"], payload["backtests_test"]
+    )
+    return selected, leader
+
+
+def trades_for(payload: dict, strategy: str, tables_dir: Path = config.TABLES_DIR) -> pd.DataFrame:
+    """Trades of one strategy from the exported test table (empty when unavailable)."""
+    path = Path(tables_dir) / "trades_test.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    trades = pd.read_csv(path)
+    if "strategy" not in trades.columns:
+        return pd.DataFrame()
+    return trades[trades["strategy"] == strategy]
+
+
+
 def main() -> None:
     st.set_page_config(page_title="ETF ML trading - research dashboard", layout="wide")
     st.title("ETF ML trading system - research dashboard")
@@ -50,8 +76,16 @@ def main() -> None:
         return
 
     payload = load_metrics(str(METRICS_PATH), METRICS_PATH.stat().st_mtime)
-    meta = payload["meta"]
-    dataset = payload["dataset"]
+    try:
+        selected, test_leader = selected_strategy(payload)
+        meta = payload["meta"]
+        dataset = payload["dataset"]
+    except (KeyError, ValueError) as exc:
+        st.error(
+            f"reports/metrics.json is incomplete or inconsistent: {exc}. "
+            "Run `python -m src.validate_reports` and regenerate the reports."
+        )
+        return
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Data cutoff", dataset["last_trade_date"])
@@ -59,8 +93,13 @@ def main() -> None:
     col3.metric("Features", f"{dataset['n_numeric']} + {dataset['n_dummies']}")
     col4.metric("Best model", payload["best_model"]["name"])
 
+    st.caption(
+        f"Strategy selected on the validation window: **{selected}**. "
+        f"Ex-post test leader (not used for selection): **{test_leader}**."
+    )
+
     st.subheader("Strategy performance (test window, net of costs)")
-    backtests = pd.DataFrame(payload["backtests_test"]).T
+    backtests = performance_table(payload)
     columns = ["total_return", "cagr", "sharpe_ratio", "max_drawdown", "total_trades", "win_rate"]
     st.dataframe(
         backtests[[c for c in columns if c in backtests.columns]].style.format(
@@ -109,12 +148,15 @@ def main() -> None:
     else:
         st.info("No trade: the best probability is below the validated threshold (stay in cash).")
 
-    st.subheader("Trades (best model, S1 rule)")
-    trades_path = config.TABLES_DIR / "trades_test.csv"
-    if trades_path.exists():
-        trades = pd.read_csv(trades_path)
-        trades = trades[trades["strategy"] == "S1_top_probability"]
+    st.subheader(f"Trades ({selected}, test window)")
+    trades = trades_for(payload, selected)
+    if not trades.empty:
         st.dataframe(trades.tail(100), use_container_width=True)
+    else:
+        st.info(
+            "No exported trades for the selected strategy. Run "
+            "`python -m src.run_pipeline --mode live` to regenerate reports/tables."
+        )
 
     with st.expander("Environment and reproducibility"):
         st.json(meta)
